@@ -3,98 +3,221 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Catálogo - Mile Streaming</title>
+  <title>Mile Streaming - Catálogo</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    body {
-      background-color: #141414;
-      color: #ffffff;
-      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-      margin: 0;
-      padding: 20px;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    body { background-color: #141414; color: #fff; min-height: 100vh; padding-bottom: 50px; }
+    
+    /* Barra superior */
     header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 20px;
-      border-bottom: 1px solid #333;
+      padding: 15px 25px;
+      background: rgba(0, 0, 0, 0.85);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid #222;
     }
-    h1 {
-      color: #E50914;
-      margin: 0;
-      font-size: 24px;
-    }
+    .brand-title { color: #E50914; font-size: 20px; font-weight: 800; letter-spacing: 1.5px; }
+    .user-info { display: flex; align-items: center; gap: 15px; font-size: 14px; }
+    .user-tag { color: #2ecc71; font-weight: bold; }
     .btn-logout {
-      background-color: #333;
+      background: #333;
       color: #fff;
       border: 1px solid #555;
-      padding: 8px 14px;
+      padding: 6px 12px;
       border-radius: 4px;
-      text-decoration: none;
-      font-size: 14px;
+      cursor: pointer;
+      font-size: 13px;
     }
-    .grid {
+
+    /* Contenedor principal */
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h2 { font-size: 22px; margin-bottom: 20px; color: #fff; }
+
+    /* Cuadrícula de películas / series */
+    .catalog-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
       gap: 20px;
-      margin-top: 30px;
     }
+
+    /* Tarjeta de contenido */
     .movie-card {
-      background-color: #222;
+      background: #1f1f1f;
       border-radius: 6px;
       overflow: hidden;
-      border: 1px solid #333;
       display: flex;
       flex-direction: column;
+      border: 1px solid #2b2b2b;
+      transition: transform 0.2s, border-color 0.2s;
     }
-    .movie-poster {
+    .movie-card:hover {
+      transform: scale(1.03);
+      border-color: #E50914;
+    }
+    .movie-card img {
       width: 100%;
-      height: 250px;
-      background-color: #111;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #666;
-      font-size: 14px;
+      height: 260px;
+      object-fit: cover;
+      background-color: #2b2b2b;
     }
-    .movie-info {
+    .movie-details {
       padding: 12px;
+      display: flex;
+      flex-direction: column;
+      flex-grow: 1;
+      justify-content: space-between;
     }
     .movie-title {
       font-size: 15px;
-      font-weight: bold;
+      font-weight: 600;
       margin-bottom: 6px;
+      color: #fff;
+    }
+    .movie-genre {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 12px;
     }
     .btn-play {
-      display: block;
-      text-align: center;
-      background-color: #E50914;
-      color: white;
-      text-decoration: none;
-      padding: 8px;
+      background: #E50914;
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
       border-radius: 4px;
       font-weight: bold;
+      cursor: pointer;
       font-size: 13px;
-      margin-top: 8px;
+      width: 100%;
+      text-align: center;
+    }
+    .btn-play:hover {
+      background: #b80710;
+    }
+
+    #loadingText {
+      text-align: center;
+      margin-top: 50px;
+      color: #aaa;
+      font-size: 16px;
     }
   </style>
 </head>
 <body>
+
   <header>
-    <h1>MILE STREAMING</h1>
-    <a href="index.html" class="btn-logout">Cerrar sesión</a>
+    <div class="brand-title">MILE STREAMING</div>
+    <div class="user-info">
+      <span>Hola, <span id="clientName" class="user-tag">Cargando...</span></span>
+      <button id="logoutBtn" class="btn-logout">Cerrar sesión</button>
+    </div>
   </header>
 
-  <h2 style="margin-top: 25px; font-size: 20px;">Títulos disponibles</h2>
-  
-  <div class="grid">
-    <div class="movie-card">
-      <div class="movie-poster">Vista Previa</div>
-      <div class="movie-info">
-        <div class="movie-title">Canal / Contenido Demo</div>
-        <a href="#" class="btn-play">Reproducir</a>
-      </div>
-    </div>
+  <div class="container">
+    <h2>Catálogo Disponible</h2>
+    <div id="loadingText">Verificando suscripción...</div>
+    <div id="catalogGrid" class="catalog-grid" style="display: none;"></div>
   </div>
+
+  <script>
+    const SUPABASE_URL = "https://procahwmwavkrbhycbbr.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InByb2NhaHdtd2F2a3JiaHljYmJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQxMTY5NjksImV4cCI6MjEwOTY5Mjk2OX0.N2gYjyuWfZ13wZlCfe3SlET01KkRDEibxHNbR9j1kAQ";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // Contenido inicial de muestra para el catálogo
+    const contentList = [
+      {
+        title: "Acción Sin Límites",
+        genre: "Acción / Aventura",
+        image: "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop&q=60"
+      },
+      {
+        title: "El Origen Secreto",
+        genre: "Ciencia Ficción",
+        image: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&auto=format&fit=crop&q=60"
+      },
+      {
+        title: "Voces del Pasado",
+        genre: "Drama / Misterio",
+        image: "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=500&auto=format&fit=crop&q=60"
+      },
+      {
+        title: "Noche Eterna",
+        genre: "Suspenso",
+        image: "https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=500&auto=format&fit=crop&q=60"
+      }
+    ];
+
+    async function initCatalog() {
+      const nameElem = document.getElementById("clientName");
+      const loadElem = document.getElementById("loadingText");
+      const gridElem = document.getElementById("catalogGrid");
+
+      // 1. Verificar sesión activa
+      const { data: { session } } = await client.auth.getSession();
+      if (!session) {
+        window.location.href = "index.html";
+        return;
+      }
+
+      // 2. Comprobar que el usuario no esté suspendido en 'profiles'
+      const { data: profile, error } = await client
+        .from("profiles")
+        .select("username, role, status")
+        .eq("id", session.user.id)
+        .single();
+
+      if (error || !profile) {
+        loadElem.textContent = "Error al verificar tu perfil.";
+        return;
+      }
+
+      if (profile.status === "suspended") {
+        document.body.innerHTML = `
+          <div style="text-align:center; padding: 60px 20px; font-family: sans-serif;">
+            <h1 style="color:#e74c3c; margin-bottom: 15px;">Cuenta Suspendida</h1>
+            <p style="color:#aaa; margin-bottom: 25px;">Tu cuenta ha sido pausada temporalmente por el administrador.</p>
+            <button onclick="logout()" style="background:#333; color:#fff; border:1px solid #555; padding:10px 20px; border-radius:4px; cursor:pointer;">Cerrar sesión</button>
+          </div>
+        `;
+        return;
+      }
+
+      nameElem.textContent = profile.username || session.user.email.split("@")[0];
+      loadElem.style.display = "none";
+      gridElem.style.display = "grid";
+
+      // 3. Renderizar las tarjetas
+      gridElem.innerHTML = "";
+      contentList.forEach(item => {
+        const card = document.createElement("div");
+        card.className = "movie-card";
+        card.innerHTML = `
+          <img src="${item.image}" alt="${item.title}">
+          <div class="movie-details">
+            <div>
+              <div class="movie-title">${item.title}</div>
+              <div class="movie-genre">${item.genre}</div>
+            </div>
+            <button class="btn-play" onclick="alert('Reproduciendo: ${item.title}')">Reproducir</button>
+          </div>
+        `;
+        gridElem.appendChild(card);
+      });
+    }
+
+    async function logout() {
+      await client.auth.signOut();
+      window.location.href = "index.html";
+    }
+
+    document.getElementById("logoutBtn").addEventListener("click", logout);
+
+    initCatalog();
+  </script>
 </body>
 </html>

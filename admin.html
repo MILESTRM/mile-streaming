@@ -16,7 +16,7 @@
     h2 { font-size: 18px; margin-bottom: 12px; }
     .form-group { margin-bottom: 10px; }
     .form-group label { display: block; font-size: 13px; color: #aaa; margin-bottom: 4px; }
-    .form-group input { width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; }
+    .form-group input, .form-group textarea { width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; font-size: 14px; }
     .btn-red { background: #E50914; color: #fff; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 5px; }
     .btn-red:disabled { background: #555; }
     .msg { margin-top: 10px; font-size: 14px; }
@@ -26,6 +26,7 @@
     .active { color: #2ecc71; font-weight: bold; }
     .suspended { color: #e74c3c; font-weight: bold; }
     .btn-act { background: #222; border: 1px solid #666; color: #fff; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .btn-del { background: #700; border: 1px solid #900; color: #fff; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -40,12 +41,13 @@
       <p style="color:#aaa;">Sesión iniciada como: <span id="adminEmail" style="color:#2ecc71; font-weight:bold;">Verificando...</span></p>
     </div>
 
+    <!-- Módulo 1: Registrar Clientes -->
     <div class="card">
       <h2>Registrar Nuevo Cliente</h2>
       <form id="createForm">
         <div class="form-group">
           <label>Usuario</label>
-          <input type="text" id="newUser" placeholder="ej: cliente02" required>
+          <input type="text" id="newUser" placeholder="ej: cliente03" required>
         </div>
         <div class="form-group">
           <label>Contraseña</label>
@@ -56,8 +58,47 @@
       </form>
     </div>
 
+    <!-- Módulo 2: Cargar Productos para la Tienda -->
     <div class="card">
-      <h2>Gestión de Usuarios</h2>
+      <h2>Publicar Producto / Plan en la Tienda</h2>
+      <form id="productForm">
+        <div class="form-group">
+          <label>Nombre del Producto / Plan</label>
+          <input type="text" id="prodName" placeholder="ej: Plan 1 Mes + 5000 Canales" required>
+        </div>
+        <div class="form-group">
+          <label>Precio ($)</label>
+          <input type="number" id="prodPrice" placeholder="ej: 8000" required>
+        </div>
+        <div class="form-group">
+          <label>Descripción / Características</label>
+          <textarea id="prodDesc" rows="2" placeholder="ej: 3 pantallas simultáneas, calidad FHD y soporte 24/7"></textarea>
+        </div>
+        <div class="form-group">
+          <label>URL de Imagen (Opcional)</label>
+          <input type="url" id="prodImg" placeholder="https://ejemplo.com/foto.jpg">
+        </div>
+        <button type="submit" id="prodBtn" class="btn-red">Publicar Producto</button>
+        <div id="prodMsg" class="msg"></div>
+      </form>
+    </div>
+
+    <!-- Módulo 3: Listado de Productos -->
+    <div class="card">
+      <h2>Productos Publicados</h2>
+      <div style="overflow-x:auto;">
+        <table id="prodTable">
+          <thead>
+            <tr><th>Nombre</th><th>Precio</th><th>Acción</th></tr>
+          </thead>
+          <tbody id="prodList"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Módulo 4: Listado de Clientes -->
+    <div class="card">
+      <h2>Gestión de Clientes</h2>
       <p id="loadMsg" style="color:#aaa;">Cargando lista...</p>
       <div style="overflow-x:auto;">
         <table id="userTable" style="display:none;">
@@ -79,18 +120,19 @@
     async function cargarPanel() {
       const { data: { session } } = await client.auth.getSession();
       if (!session) {
-        document.getElementById("adminEmail").innerText = "Sin sesión. Redirigiendo...";
-        setTimeout(() => window.location.href = "index.html", 1500);
+        window.location.href = "index.html";
         return;
       }
       document.getElementById("adminEmail").innerText = session.user.email;
 
+      cargarUsuarios();
+      cargarProductos();
+    }
+
+    async function cargarUsuarios() {
       const { data: profiles, error } = await client.from("profiles").select("id, username, role, status");
       const loadMsg = document.getElementById("loadMsg");
-      if (error) {
-        loadMsg.innerText = "Error: " + error.message;
-        return;
-      }
+      if (error) { loadMsg.innerText = "Error: " + error.message; return; }
       loadMsg.style.display = "none";
       const table = document.getElementById("userTable");
       const tbody = document.getElementById("userList");
@@ -113,8 +155,64 @@
 
     async function cambiarEstado(id, nuevo) {
       await client.from("profiles").update({ status: nuevo }).eq("id", id);
-      cargarPanel();
+      cargarUsuarios();
     }
+
+    async function cargarProductos() {
+      const { data: prods } = await client.from("products").select("*").order("created_at", { ascending: false });
+      const tbody = document.getElementById("prodList");
+      tbody.innerHTML = "";
+      if (!prods || prods.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='3' style='color:#aaa;'>No hay productos cargados</td></tr>";
+        return;
+      }
+      prods.forEach(p => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${p.name}</td>
+          <td style="color:#2ecc71;">$${p.price}</td>
+          <td><button class="btn-del" onclick="eliminarProducto('${p.id}')">Eliminar</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function eliminarProducto(id) {
+      if (!confirm("¿Eliminar este producto?")) return;
+      await client.from("products").delete().eq("id", id);
+      cargarProductos();
+    }
+
+    document.getElementById("productForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("prodName").value.trim();
+      const price = document.getElementById("prodPrice").value;
+      const desc = document.getElementById("prodDesc").value.trim();
+      const img = document.getElementById("prodImg").value.trim();
+      const msg = document.getElementById("prodMsg");
+      const btn = document.getElementById("prodBtn");
+
+      btn.disabled = true;
+      msg.innerText = "Guardando...";
+
+      const { error } = await client.from("products").insert([{
+        name,
+        price: parseFloat(price),
+        description: desc,
+        image_url: img || null
+      }]);
+
+      if (error) {
+        msg.style.color = "#e74c3c";
+        msg.innerText = "Error: " + error.message;
+      } else {
+        msg.style.color = "#2ecc71";
+        msg.innerText = "¡Producto publicado con éxito!";
+        document.getElementById("productForm").reset();
+        cargarProductos();
+      }
+      btn.disabled = false;
+    });
 
     document.getElementById("createForm").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -133,7 +231,7 @@
         msg.style.color = "#2ecc71";
         msg.innerText = "¡Usuario creado!";
         document.getElementById("createForm").reset();
-        cargarPanel();
+        cargarUsuarios();
       } catch (err) {
         msg.style.color = "#e74c3c";
         msg.innerText = "Error: " + err.message;

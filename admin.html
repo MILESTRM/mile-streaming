@@ -227,7 +227,17 @@
   <script>
     const SUPABASE_URL = "https://procahwmwavkrbhycbbr.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InByb2NhaHdtd2F2a3JiaHljYmJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQxMTY5NjksImV4cCI6MjEwOTY5Mjk2OX0.N2gYjyuWfZ13wZlCfe3SlET01KkRDEibxHNbR9j1kAQ";
+    
+    // Cliente principal para mantener la sesión de admin activa
     const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // Cliente aislado sin almacenamiento para dar de alta sin cerrar la sesión del admin
+    const authSignupClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      }
+    });
 
     async function initAdmin() {
       const emailElem = document.getElementById("adminEmail");
@@ -245,111 +255,5 @@
 
       const { data: profiles, error: profErr } = await client
         .from("profiles")
-        .select("id, username, role, status");
-
-      if (profErr) {
-        loadMsg.style.color = "#ff6b6b";
-        loadMsg.textContent = "Error de Supabase: " + profErr.message;
-        return;
-      }
-
-      if (!profiles || profiles.length === 0) {
-        loadMsg.textContent = "No hay perfiles registrados en la tabla.";
-        return;
-      }
-
-      loadMsg.style.display = "none";
-      const table = document.getElementById("usersTable");
-      const tbody = document.getElementById("usersList");
-      table.style.display = "table";
-      tbody.innerHTML = "";
-
-      profiles.forEach(p => {
-        const tr = document.createElement("tr");
-        const statusClass = p.status === "active" ? "active" : "suspended";
-        const nextStatus = p.status === "active" ? "suspended" : "active";
-        const actionLabel = p.status === "active" ? "Suspender" : "Activar";
-
-        tr.innerHTML = `
-          <td>${p.username || "Sin usuario"}</td>
-          <td>${p.role || "customer"}</td>
-          <td><span class="badge ${statusClass}">${p.status || "inactivo"}</span></td>
-          <td>
-            ${p.role !== 'admin' ? `
-              <button class="btn-action" onclick="toggleUserStatus('${p.id}', '${nextStatus}')">
-                ${actionLabel}
-              </button>
-            ` : '<span style="color:#777;">Admin</span>'}
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    async function toggleUserStatus(id, newStatus) {
-      const { error } = await client
-        .from("profiles")
-        .update({ status: newStatus })
-        .eq("id", id);
-
-      if (error) {
-        alert("Error al actualizar: " + error.message);
-      } else {
-        initAdmin();
-      }
-    }
-
-    document.getElementById("createUserForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const userInp = document.getElementById("newUsername").value.trim();
-      const passInp = document.getElementById("newPassword").value;
-      const msg = document.getElementById("createMsg");
-      const btn = document.getElementById("createBtn");
-
-      msg.className = "form-msg";
-      btn.disabled = true;
-      btn.textContent = "Creando...";
-
-      const email = userInp.includes("@") ? userInp : `${userInp}@milestreaming.internal`;
-
-      try {
-        const { data: authData, error: authErr } = await client.auth.signUp({
-          email: email,
-          password: passInp
-        });
-
-        if (authErr) throw authErr;
-
-        if (authData.user) {
-          const { error: profErr } = await client.from("profiles").upsert({
-            id: authData.user.id,
-            username: userInp,
-            role: "customer",
-            status: "active"
-          });
-
-          if (profErr) throw profErr;
-        }
-
-        msg.className = "form-msg success";
-        msg.textContent = `¡Cliente "${userInp}" creado con éxito!`;
-        document.getElementById("createUserForm").reset();
-        initAdmin();
-      } catch (err) {
-        msg.className = "form-msg error";
-        msg.textContent = "Error al crear cliente: " + err.message;
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "Crear";
-      }
-    });
-
-    document.getElementById("logoutBtn").addEventListener("click", async () => {
-      await client.auth.signOut();
-      window.location.href = "index.html";
-    });
-
-    initAdmin();
-  </script>
-</body>
-</html>
+        .select("id,
+                

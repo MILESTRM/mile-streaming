@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mile Streaming</title>
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -82,8 +84,29 @@
       cursor: pointer;
       margin-top: 10px;
     }
-    .btn-login:active {
-      background-color: #b80710;
+    .btn-login:disabled {
+      background-color: #555555;
+      cursor: not-allowed;
+    }
+    .message {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 14px;
+      display: none;
+      text-align: center;
+    }
+    .message.error {
+      display: block;
+      background-color: rgba(229, 9, 20, 0.2);
+      border: 1px solid #E50914;
+      color: #ff6b6b;
+    }
+    .message.success {
+      display: block;
+      background-color: rgba(46, 204, 113, 0.2);
+      border: 1px solid #2ecc71;
+      color: #2ecc71;
     }
     .footer-note {
       margin-top: 25px;
@@ -104,15 +127,16 @@
     <form id="loginForm">
       <div class="form-group">
         <label for="username">Usuario</label>
-        <input type="text" id="username" placeholder="Ingresá tu usuario" required>
+        <input type="text" id="username" placeholder="Ingresá tu usuario" required autocomplete="username">
       </div>
 
       <div class="form-group">
         <label for="password">Contraseña</label>
-        <input type="password" id="password" placeholder="Ingresá tu contraseña" required>
+        <input type="password" id="password" placeholder="Ingresá tu contraseña" required autocomplete="current-password">
       </div>
 
-      <button type="submit" class="btn-login">Ingresar</button>
+      <button type="submit" id="submitBtn" class="btn-login">Ingresar</button>
+      <div id="statusMessage" class="message"></div>
     </form>
   </div>
 
@@ -120,5 +144,72 @@
     Acceso exclusivo para clientes autorizados
   </div>
 
+  <script>
+    const SUPABASE_URL = "https://prucxanwrewskntkyohw.supabase.co";
+    const SUPABASE_KEY = "Sb_publishable_IpZjSW_apAMUYVBZa5u1bg_WoEy2HIe";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const form = document.getElementById("loginForm");
+    const msg = document.getElementById("statusMessage");
+    const btn = document.getElementById("submitBtn");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      msg.className = "message";
+      msg.textContent = "";
+
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+
+      btn.disabled = true;
+      btn.textContent = "Verificando...";
+
+      try {
+        const email = username.includes("@") ? username : `${username}@milestreaming.internal`;
+
+        const { data, error } = await client.auth.signInWithPassword({
+          email: email,
+          password: password
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        const { data: profile, error: profileErr } = await client
+          .from("profiles")
+          .select("username, role, status")
+          .eq("id", data.user.id)
+          .single();
+
+        if (profileErr) {
+          throw new Error("No se pudo obtener el perfil del usuario.");
+        }
+
+        if (profile.status !== "active") {
+          await client.auth.signOut();
+          throw new Error("Esta cuenta se encuentra inactiva o suspendida.");
+        }
+
+        msg.className = "message success";
+        msg.textContent = `¡Bienvenido ${profile.username}! Rol: ${profile.role}`;
+
+        setTimeout(() => {
+          if (profile.role === "admin") {
+            window.location.href = "admin.html";
+          } else {
+            window.location.href = "catalog.html";
+          }
+        }, 1200);
+
+      } catch (err) {
+        msg.className = "message error";
+        msg.textContent = err.message || "Usuario o contraseña incorrectos.";
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Ingresar";
+      }
+    });
+  </script>
 </body>
 </html>

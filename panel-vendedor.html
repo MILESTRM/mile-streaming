@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi Panel de Ventas</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+    body { background-color: #141414; color: #fff; padding: 15px; }
+    header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #333; max-width: 800px; margin: 0 auto; }
+    .brand { color: #E50914; font-size: 20px; font-weight: bold; }
+    .btn-out { background: #333; color: #fff; border: 1px solid #555; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+    .container { max-width: 800px; margin: 20px auto; }
+    .card { background: rgba(0,0,0,0.7); border: 1px solid #2b2b2b; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+    h2 { font-size: 18px; margin-bottom: 12px; }
+    .form-group { margin-bottom: 10px; }
+    .form-group label { display: block; font-size: 13px; color: #aaa; margin-bottom: 4px; }
+    .form-group input, .form-group textarea { width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; font-size: 14px; }
+    .btn-red { background: #E50914; color: #fff; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 5px; }
+    .link-box { background: #222; border: 1px dashed #2ecc71; padding: 12px; border-radius: 6px; margin-top: 10px; word-break: break-all; color: #2ecc71; font-weight: bold; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #333; }
+    th { color: #888; }
+    .btn-del { background: #700; border: 1px solid #900; color: #fff; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">MI PANEL DE VENDEDOR</div>
+    <button id="logoutBtn" class="btn-out">Cerrar sesión</button>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <h2>Tu Enlace de Tienda Personal</h2>
+      <p style="color:#aaa; font-size:13px;">Compartí este enlace con tus clientes para que te compren directo por WhatsApp:</p>
+      <div id="shopLink" class="link-box">Cargando...</div>
+    </div>
+
+    <div class="card">
+      <h2>Publicar Producto / Plan</h2>
+      <form id="sellerProductForm">
+        <div class="form-group">
+          <label>Tu número de WhatsApp (con código de país, ej: 549...)</label>
+          <input type="number" id="sellerPhone" placeholder="ej: 5493624110890" required>
+        </div>
+        <div class="form-group">
+          <label>Nombre del Producto</label>
+          <input type="text" id="prodName" placeholder="ej: Cuenta Premium 1 Pantalla" required>
+        </div>
+        <div class="form-group">
+          <label>Precio ($)</label>
+          <input type="number" id="prodPrice" placeholder="ej: 3500" required>
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea id="prodDesc" rows="2" placeholder="ej: Entrega rápida y soporte"></textarea>
+        </div>
+        <div class="form-group">
+          <label>URL Imagen (Opcional)</label>
+          <input type="url" id="prodImg" placeholder="https://ejemplo.com/foto.jpg">
+        </div>
+        <button type="submit" id="saveBtn" class="btn-red">Guardar y Publicar</button>
+        <div id="msg" style="margin-top:10px; font-size:13px;"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Mis Productos Publicados</h2>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr><th>Producto</th><th>Precio</th><th>Acción</th></tr>
+          </thead>
+          <tbody id="myProdList"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://procahwmwavkrbhycbbr.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InByb2NhaHdtd2F2a3JiaHljYmJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQxMTY5NjksImV4cCI6MjEwOTY5Mjk2OX0.N2gYjyuWfZ13wZlCfe3SlET01KkRDEibxHNbR9j1kAQ";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let currentUserId = null;
+
+    async function initSeller() {
+      const { data: { session } } = await client.auth.getSession();
+      if (!session) {
+        window.location.href = "index.html";
+        return;
+      }
+      currentUserId = session.user.id;
+
+      const { data: profile } = await client.from("profiles").select("username").eq("id", currentUserId).single();
+      const storeUser = profile?.username || currentUserId;
+      const baseUrl = window.location.origin + window.location.pathname.replace("panel-vendedor.html", "tienda.html");
+      document.getElementById("shopLink").innerText = `${baseUrl}?user=${storeUser}`;
+
+      cargarMisProductos();
+    }
+
+    async function cargarMisProductos() {
+      const { data: prods } = await client.from("products").select("*").eq("user_id", currentUserId);
+      const tbody = document.getElementById("myProdList");
+      tbody.innerHTML = "";
+      if (!prods || prods.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='3' style='color:#aaa;'>No has cargado productos todavía.</td></tr>";
+        return;
+      }
+      prods.forEach(p => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${p.name}</td>
+          <td style="color:#2ecc71;">$${p.price}</td>
+          <td><button class="btn-del" onclick="borrarProducto('${p.id}')">Borrar</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function borrarProducto(id) {
+      if (!confirm("¿Eliminar producto?")) return;
+      await client.from("products").delete().eq("id", id);
+      cargarMisProductos();
+    }
+
+    document.getElementById("sellerProductForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById("saveBtn");
+      const msg = document.getElementById("msg");
+      btn.disabled = true;
+
+      const { error } = await client.from("products").insert([{
+        user_id: currentUserId,
+        seller_whatsapp: document.getElementById("sellerPhone").value.trim(),
+        name: document.getElementById("prodName").value.trim(),
+        price: parseFloat(document.getElementById("prodPrice").value),
+        description: document.getElementById("prodDesc").value.trim(),
+        image_url: document.getElementById("prodImg").value.trim() || null
+      }]);
+
+      if (error) {
+        msg.style.color = "#e74c3c";
+        msg.innerText = "Error: " + error.message;
+      } else {
+        msg.style.color = "#2ecc71";
+        msg.innerText = "¡Producto publicado con éxito!";
+        document.getElementById("sellerProductForm").reset();
+        cargarMisProductos();
+      }
+      btn.disabled = false;
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      await client.auth.signOut();
+      window.location.href = "index.html";
+    });
+
+    initSeller();
+  </script>
+</body>
+</html>

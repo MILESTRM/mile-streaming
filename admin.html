@@ -228,14 +228,15 @@
     const SUPABASE_URL = "https://procahwmwavkrbhycbbr.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InByb2NhaHdtd2F2a3JiaHljYmJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQxMTY5NjksImV4cCI6MjEwOTY5Mjk2OX0.N2gYjyuWfZ13wZlCfe3SlET01KkRDEibxHNbR9j1kAQ";
     
-    // Cliente principal para mantener la sesión de admin activa
+    // Cliente principal
     const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // Cliente aislado sin almacenamiento para dar de alta sin cerrar la sesión del admin
+    // Cliente secundario para registros sin tocar la sesión activa
     const authSignupClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: {
         persistSession: false,
-        autoRefreshToken: false
+        autoRefreshToken: false,
+        detectSessionInUrl: false
       }
     });
 
@@ -243,17 +244,73 @@
       const emailElem = document.getElementById("adminEmail");
       const loadMsg = document.getElementById("loadingMsg");
 
-      const { data: { user }, error: userErr } = await client.auth.getUser();
+      try {
+        // Obtener la sesión local activa
+        const { data: { session }, error: sessionErr } = await client.auth.getSession();
 
-      if (userErr || !user) {
-        emailElem.textContent = "No autenticado. Redirigiendo...";
-        setTimeout(() => { window.location.href = "index.html"; }, 1500);
-        return;
+        if (sessionErr || !session || !session.user) {
+          emailElem.textContent = "No autenticado. Redirigiendo al login...";
+          setTimeout(() => { window.location.href = "index.html"; }, 1000);
+          return;
+        }
+
+        emailElem.textContent = session.user.email;
+
+        // Cargar perfiles de usuarios
+        const { data: profiles, error: profErr } = await client
+          .from("profiles")
+          .select("id, username, role, status");
+
+        if (profErr) {
+          loadMsg.style.color = "#ff6b6b";
+          loadMsg.textContent = "Error de base de datos: " + profErr.message;
+          return;
+        }
+
+        if (!profiles || profiles.length === 0) {
+          loadMsg.textContent = "No hay perfiles registrados en la base de datos.";
+          return;
+        }
+
+        loadMsg.style.display = "none";
+        const table = document.getElementById("usersTable");
+        const tbody = document.getElementById("usersList");
+        table.style.display = "table";
+        tbody.innerHTML = "";
+
+        profiles.forEach(p => {
+          const tr = document.createElement("tr");
+          const statusClass = p.status === "active" ? "active" : "suspended";
+          const nextStatus = p.status === "active" ? "suspended" : "active";
+          const actionLabel = p.status === "active" ? "Suspender" : "Activar";
+
+          tr.innerHTML = `
+            <td>${p.username || "Sin usuario"}</td>
+            <td>${p.role || "customer"}</td>
+            <td><span class="badge ${statusClass}">${p.status || "inactivo"}</span></td>
+            <td>
+              ${p.role !== 'admin' ? `
+                <button class="btn-action" onclick="toggleUserStatus('${p.id}', '${nextStatus}')">
+                  ${actionLabel}
+                </button>
+              ` : '<span style="color:#777;">Admin</span>'}
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+      } catch (err) {
+        emailElem.textContent = "Error al conectar";
+        loadMsg.textContent = "Error inesperado: " + err.message;
       }
+    }
 
-      emailElem.textContent = user.email;
-
-      const { data: profiles, error: profErr } = await client
+    async function toggleUserStatus(id, newStatus) {
+      const { error } = await client
         .from("profiles")
-        .select("id,
-                
+        .update({ status: newStatus })
+        .eq("id", id);
+
+      if (error) {
+        alert("Error al actualizar: " + error.message);
+        

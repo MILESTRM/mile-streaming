@@ -68,6 +68,61 @@
       color: #2ecc71;
       font-weight: bold;
     }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 15px;
+      margin-top: 10px;
+    }
+    @media (min-width: 600px) {
+      .form-grid {
+        grid-template-columns: 1fr 1fr auto;
+      }
+    }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 5px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background-color: #222;
+      color: #fff;
+      font-size: 14px;
+    }
+    .btn-submit {
+      background-color: #E50914;
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 14px;
+      align-self: flex-end;
+      height: 40px;
+    }
+    .btn-submit:disabled {
+      background-color: #555;
+      cursor: not-allowed;
+    }
+    .form-msg {
+      margin-top: 10px;
+      font-size: 13px;
+      display: none;
+    }
+    .form-msg.error {
+      display: block;
+      color: #ff6b6b;
+    }
+    .form-msg.success {
+      display: block;
+      color: #2ecc71;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -133,6 +188,24 @@
     </div>
 
     <div class="card">
+      <h2>Registrar Nuevo Cliente</h2>
+      <form id="createUserForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="newUsername">Usuario o Correo</label>
+            <input type="text" id="newUsername" placeholder="ej: cliente01" required>
+          </div>
+          <div class="form-group">
+            <label for="newPassword">Contraseña de acceso</label>
+            <input type="password" id="newPassword" placeholder="Contraseña segura" required>
+          </div>
+          <button type="submit" id="createBtn" class="btn-submit">Crear</button>
+        </div>
+        <div id="createMsg" class="form-msg"></div>
+      </form>
+    </div>
+
+    <div class="card">
       <h2>Gestión de Usuarios</h2>
       <p id="loadingMsg">Cargando cuentas...</p>
       <div style="overflow-x: auto;">
@@ -170,7 +243,6 @@
 
       emailElem.textContent = user.email;
 
-      // Cargar perfiles sin ordenar por columnas inexistentes
       const { data: profiles, error: profErr } = await client
         .from("profiles")
         .select("id, username, role, status");
@@ -226,6 +298,51 @@
         initAdmin();
       }
     }
+
+    document.getElementById("createUserForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const userInp = document.getElementById("newUsername").value.trim();
+      const passInp = document.getElementById("newPassword").value;
+      const msg = document.getElementById("createMsg");
+      const btn = document.getElementById("createBtn");
+
+      msg.className = "form-msg";
+      btn.disabled = true;
+      btn.textContent = "Creando...";
+
+      const email = userInp.includes("@") ? userInp : `${userInp}@milestreaming.internal`;
+
+      try {
+        const { data: authData, error: authErr } = await client.auth.signUp({
+          email: email,
+          password: passInp
+        });
+
+        if (authErr) throw authErr;
+
+        if (authData.user) {
+          const { error: profErr } = await client.from("profiles").upsert({
+            id: authData.user.id,
+            username: userInp,
+            role: "customer",
+            status: "active"
+          });
+
+          if (profErr) throw profErr;
+        }
+
+        msg.className = "form-msg success";
+        msg.textContent = `¡Cliente "${userInp}" creado con éxito!`;
+        document.getElementById("createUserForm").reset();
+        initAdmin();
+      } catch (err) {
+        msg.className = "form-msg error";
+        msg.textContent = "Error al crear cliente: " + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Crear";
+      }
+    });
 
     document.getElementById("logoutBtn").addEventListener("click", async () => {
       await client.auth.signOut();
